@@ -3,15 +3,24 @@ import json
 import os
 import sys
 from collections import defaultdict
+from functools import lru_cache
 from itertools import count
 from typing import List, Set
 
 import requests
 from packaging.specifiers import SpecifierSet
 from packaging.requirements import Requirement
-from packaging.version import Version
+import packaging.version as pv
 
 sess = requests.Session()
+
+parse_requirement = lru_cache(maxsize=None)(Requirement)
+
+
+def monkeypatch():
+    # Hack in some caches to make things faster...
+    pv._cmpkey = lru_cache(maxsize=None)(pv._cmpkey)
+    pv.parse = lru_cache(maxsize=None)(pv.parse)
 
 
 def get_pypi_data(name: str, version=None):
@@ -57,11 +66,11 @@ class Package:
             acceptable_versions = self.versions
         if not acceptable_versions:
             raise RuntimeError(f"No {self.name} versions satisfy {constraints}!")
-        return max(acceptable_versions, key=Version)
+        return max(acceptable_versions, key=pv.parse)
 
     def get_requirements(self, version) -> List[Requirement]:
         deps = self.version_infos[version].get("requires_dist") or []
-        return [Requirement(dep) for dep in deps]
+        return [parse_requirement(dep) for dep in deps]
 
 
 class Pypiverse:
@@ -117,6 +126,7 @@ def pipimi(initial_constraint_strings):
 
 
 def main():
+    monkeypatch()
     ap = argparse.ArgumentParser()
     ap.add_argument("req", nargs="*")
     ap.add_argument("-r", dest="filenames", action="append", default=[])
