@@ -129,6 +129,7 @@ def main():
     monkeypatch()
     ap = argparse.ArgumentParser()
     ap.add_argument("req", nargs="*")
+    ap.add_argument("--show-constraints", action="store_true")
     ap.add_argument("-r", dest="filenames", action="append", default=[])
     args = ap.parse_args()
     initial = list(args.req)
@@ -143,7 +144,13 @@ def main():
     resolution, constraints = pipimi(initial)
 
     for name, version in sorted(resolution.items()):
-        print(f"{name}=={version}")
+        req = f"{name}=={version}"
+        if args.show_constraints:
+            package_cons = ', '.join(sorted(set(str(c) for c in constraints.get(name))))
+            if package_cons:
+                print(f"{req}  # {package_cons}")
+                continue
+        print(req)
 
 
 if __name__ == "__main__":
