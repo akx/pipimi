@@ -3,13 +3,13 @@ import json
 import os
 import sys
 from collections import defaultdict
-from distutils.version import LooseVersion
 from itertools import count
 from typing import List, Set
 
 import requests
 from packaging.specifiers import SpecifierSet
 from packaging.requirements import Requirement
+from packaging.version import Version
 
 sess = requests.Session()
 
@@ -51,11 +51,13 @@ class Package:
             acceptable_versions = [
                 version
                 for version in self.versions
-                if all(version in c for c in constraints)
+                if all(version in c for c in constraints if c)
             ]
         else:
             acceptable_versions = self.versions
-        return max(acceptable_versions, key=LooseVersion)
+        if not acceptable_versions:
+            raise RuntimeError(f"No {self.name} versions satisfy {constraints}!")
+        return max(acceptable_versions, key=Version)
 
     def get_requirements(self, version) -> List[Requirement]:
         deps = self.version_infos[version].get("requires_dist") or []
