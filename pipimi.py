@@ -1,5 +1,6 @@
 import argparse
 import json
+import logging
 import os
 import sys
 from collections import defaultdict
@@ -13,6 +14,7 @@ from packaging.requirements import Requirement
 import packaging.version as pv
 
 sess = requests.Session()
+log = logging.getLogger("pipimi")
 
 parse_requirement = lru_cache(maxsize=None)(Requirement)
 
@@ -126,6 +128,7 @@ def pipimi(initial_constraint_strings):
 
 
 def main():
+    logging.basicConfig(level=logging.INFO)
     monkeypatch()
     ap = argparse.ArgumentParser()
     ap.add_argument("req", nargs="*")
