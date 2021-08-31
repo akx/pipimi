@@ -3,10 +3,11 @@ import json
 import logging
 import os
 import sys
+import tqdm
 from collections import defaultdict
 from functools import lru_cache
 from itertools import count
-from typing import List, Set
+from typing import List, Set, Dict
 
 import requests
 from packaging.specifiers import SpecifierSet
@@ -90,18 +91,22 @@ class Pypiverse:
         return pkg
 
 
-def tighten_constraints(pypiverse, constraints):
+def tighten_constraints(
+    pypiverse: Pypiverse, constraints: Dict[str, Set[SpecifierSet]]
+):
     resolution = {}
     new_constraints = defaultdict(list)
-    for package_name, constraint in constraints.items():
-        pkg = pypiverse.populate(package_name)
-        version = pkg.get_best_version(constraint)
-        resolution[package_name] = version
-        pypiverse.populate(pkg.name, version)
-        for req in pkg.get_requirements(version):
-            if req.marker:
-                continue  # TODO: support these
-            new_constraints[req.name].append(req.specifier)
+    with tqdm.tqdm(constraints.items()) as prog:
+        for package_name, constraint in prog:
+            prog.set_description(package_name, refresh=False)
+            pkg = pypiverse.populate(package_name)
+            version = pkg.get_best_version(constraint)
+            resolution[package_name] = version
+            pypiverse.populate(pkg.name, version)
+            for req in pkg.get_requirements(version):
+                if req.marker:
+                    continue  # TODO: support these
+                new_constraints[req.name].append(req.specifier)
 
     return resolution, new_constraints
 
@@ -149,7 +154,7 @@ def main():
     for name, version in sorted(resolution.items()):
         req = f"{name}=={version}"
         if args.show_constraints:
-            package_cons = ', '.join(sorted(set(str(c) for c in constraints.get(name))))
+            package_cons = ", ".join(sorted(set(str(c) for c in constraints.get(name))))
             if package_cons:
                 print(f"{req}  # {package_cons}")
                 continue
