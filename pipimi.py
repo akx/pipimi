@@ -7,7 +7,7 @@ import tqdm
 from collections import defaultdict
 from functools import lru_cache
 from itertools import count
-from typing import List, Set, Dict
+from typing import List, Set, Dict, Tuple
 
 import requests
 from packaging.specifiers import SpecifierSet
@@ -26,14 +26,14 @@ def monkeypatch():
     pv.parse = lru_cache(maxsize=None)(pv.parse)
 
 
-def get_pypi_data(name: str, version=None):
+def get_pypi_data(name: str, version=None, allow_cache_read=True):
     if version:
         cache_file = f"cache/{name.lower()}@{version}.json"
         url = f"https://pypi.org/pypi/{name}/{version}/json"
     else:
         cache_file = f"cache/{name.lower()}.json"
         url = f"https://pypi.org/pypi/{name}/json"
-    if os.path.isfile(cache_file):
+    if allow_cache_read and os.path.isfile(cache_file):
         with open(cache_file, "r") as f:
             return json.load(f)
     resp = sess.get(url)
@@ -42,6 +42,10 @@ def get_pypi_data(name: str, version=None):
     with open(cache_file, "w") as f:
         json.dump(data, f, sort_keys=True, indent=2, ensure_ascii=False)
     return data
+
+
+class NoAcceptableVersions(RuntimeError):
+    pass
 
 
 class Package:
@@ -68,7 +72,9 @@ class Package:
         else:
             acceptable_versions = self.versions
         if not acceptable_versions:
-            raise RuntimeError(f"No {self.name} versions satisfy {constraints}!")
+            raise NoAcceptableVersions(
+                f"No {self.name!r} versions satisfy {constraints}!"
+            )
         return max(acceptable_versions, key=pv.parse)
 
     def get_requirements(self, version) -> List[Requirement]:
@@ -80,15 +86,33 @@ class Pypiverse:
     def __init__(self):
         self.packages = {}
 
-    def populate(self, name: str, version=None):
+    def populate(self, name: str, version=None, allow_cache_read=True):
         name = name.lower()
-        pkg = self.packages.get(name)
+        pkg = self.packages.get(name) if allow_cache_read else None
         if not pkg:
-            pkg = Package(get_pypi_data(name))
+            pkg = Package(get_pypi_data(name, allow_cache_read=allow_cache_read))
             self.packages[pkg.name] = pkg
         if version and version not in pkg.version_infos:
-            pkg.add_version_info(get_pypi_data(name, version))
+            pkg.add_version_info(
+                get_pypi_data(name, version, allow_cache_read=allow_cache_read)
+            )
         return pkg
+
+
+def get_best_constrained_version(
+    pypiverse: Pypiverse,
+    package_name: str,
+    constraint: Set[SpecifierSet],
+) -> Tuple[Package, str]:
+    for attempt in (1, 2):
+        pkg = pypiverse.populate(package_name, allow_cache_read=(attempt == 1))
+        try:
+            return (pkg, pkg.get_best_version(constraint))
+        except NoAcceptableVersions as nav:
+            if attempt == 1:
+                log.info(f"{nav} - trying again without cache")
+                continue
+            raise
 
 
 def tighten_constraints(
@@ -99,8 +123,9 @@ def tighten_constraints(
     with tqdm.tqdm(constraints.items()) as prog:
         for package_name, constraint in prog:
             prog.set_description(package_name, refresh=False)
-            pkg = pypiverse.populate(package_name)
-            version = pkg.get_best_version(constraint)
+            pkg, version = get_best_constrained_version(
+                pypiverse, package_name, constraint
+            )
             resolution[package_name] = version
             pypiverse.populate(pkg.name, version)
             for req in pkg.get_requirements(version):
