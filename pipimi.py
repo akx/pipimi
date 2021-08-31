@@ -7,7 +7,7 @@ import tqdm
 from collections import defaultdict
 from functools import lru_cache
 from itertools import count
-from typing import List, Set, Dict, Tuple
+from typing import List, Set, Dict, Tuple, Iterable
 
 import requests
 from packaging.specifiers import SpecifierSet
@@ -113,6 +113,7 @@ def get_best_constrained_version(
                 log.info(f"{nav} - trying again without cache")
                 continue
             raise
+    raise Exception()
 
 
 def tighten_constraints(
@@ -136,7 +137,7 @@ def tighten_constraints(
     return resolution, new_constraints
 
 
-def pipimi(initial_constraint_strings):
+def pipimi(initial_constraint_strings: Iterable[str]) -> Tuple[dict, dict]:
     pypiverse = Pypiverse()
     constraints = defaultdict(set)
     for ics in initial_constraint_strings:
@@ -154,6 +155,7 @@ def pipimi(initial_constraint_strings):
         if resolution == last_resolution:
             break
         last_resolution = resolution
+    assert last_resolution
     return last_resolution, constraints
 
 
@@ -179,7 +181,9 @@ def main():
     for name, version in sorted(resolution.items()):
         req = f"{name}=={version}"
         if args.show_constraints:
-            package_cons = ", ".join(sorted(set(str(c) for c in constraints.get(name))))
+            package_cons = ", ".join(
+                sorted(set(str(c) for c in constraints.get(name, [])))
+            )
             if package_cons:
                 print(f"{req}  # {package_cons}")
                 continue
