@@ -7,14 +7,13 @@ import tqdm
 from collections import defaultdict
 from functools import lru_cache
 from itertools import count
-from typing import List, Set, Dict, Tuple, Iterable
+from typing import List, Set, Dict, Tuple, Iterable, Any
 
-import requests
+import urllib3
 from packaging.specifiers import SpecifierSet
 from packaging.requirements import Requirement
 import packaging.version as pv
 
-sess = requests.Session()
 log = logging.getLogger("pipimi")
 
 parse_requirement = lru_cache(maxsize=None)(Requirement)
@@ -24,6 +23,16 @@ def monkeypatch():
     # Hack in some caches to make things faster...
     pv._cmpkey = lru_cache(maxsize=None)(pv._cmpkey)
     pv.parse = lru_cache(maxsize=None)(pv.parse)
+
+
+http = urllib3.PoolManager()
+
+
+def get_json(url: str) -> Any:
+    r = http.request("GET", url)
+    if r.status != 200:
+        raise ValueError(f"GET {url}: {r.status}")
+    return json.loads(r.data)
 
 
 def get_pypi_data(name: str, version=None, allow_cache_read=True):
@@ -36,9 +45,8 @@ def get_pypi_data(name: str, version=None, allow_cache_read=True):
     if allow_cache_read and os.path.isfile(cache_file):
         with open(cache_file, "r") as f:
             return json.load(f)
-    resp = sess.get(url)
-    resp.raise_for_status()
-    data = resp.json()
+    data = get_json(url)
+    os.makedirs(os.path.dirname(cache_file), exist_ok=True)
     with open(cache_file, "w") as f:
         json.dump(data, f, sort_keys=True, indent=2, ensure_ascii=False)
     return data
