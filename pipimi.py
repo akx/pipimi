@@ -3,6 +3,8 @@ import json
 import logging
 import os
 import sys
+import tempfile
+
 import tqdm
 from collections import defaultdict
 from functools import lru_cache
@@ -17,6 +19,9 @@ import packaging.version as pv
 log = logging.getLogger("pipimi")
 
 parse_requirement = lru_cache(maxsize=None)(Requirement)
+cache_dir = os.environ.get(
+    "PIPIMI_CACHE_DIR", os.path.join(tempfile.gettempdir(), ".pipimi-cache")
+)
 
 
 def monkeypatch():
@@ -37,11 +42,12 @@ def get_json(url: str) -> Any:
 
 def get_pypi_data(name: str, version=None, allow_cache_read=True):
     if version:
-        cache_file = f"cache/{name.lower()}@{version}.json"
+        cache_file = os.path.join(cache_dir, f"{name.lower()}@{version}.json")
         url = f"https://pypi.org/pypi/{name}/{version}/json"
     else:
-        cache_file = f"cache/{name.lower()}.json"
+        cache_file = os.path.join(cache_dir, "{name.lower()}.json")
         url = f"https://pypi.org/pypi/{name}/json"
+
     if allow_cache_read and os.path.isfile(cache_file):
         with open(cache_file, "r") as f:
             return json.load(f)
