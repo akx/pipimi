@@ -1,2 +1,5 @@
+*.egg-info
 *.py[cod]
+/build
 /cache
+/dist
