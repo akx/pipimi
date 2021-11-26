@@ -45,7 +45,7 @@ def get_pypi_data(name: str, version=None, allow_cache_read=True):
         cache_file = os.path.join(cache_dir, f"{name.lower()}@{version}.json")
         url = f"https://pypi.org/pypi/{name}/{version}/json"
     else:
-        cache_file = os.path.join(cache_dir, "{name.lower()}.json")
+        cache_file = os.path.join(cache_dir, f"{name.lower()}.json")
         url = f"https://pypi.org/pypi/{name}/json"
 
     if allow_cache_read and os.path.isfile(cache_file):
